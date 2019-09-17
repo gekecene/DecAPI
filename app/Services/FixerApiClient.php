@@ -52,7 +52,7 @@ class FixerApiClient
             'http_errors' => false,
         ];
 
-        $query['access_key'] = $this->apiKey;
+        $clientParams['query']['access_key'] = $this->apiKey;
 
         $response = $this->client->request('GET', $this->baseUrl . $path, $clientParams);
         return json_decode($response->getBody(), true);
