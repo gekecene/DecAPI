@@ -107,7 +107,7 @@ class TwitchApiController extends Controller
         $url = sprintf('https://api.twitch.tv/api/channels/%s/product', $channel);
 
         return $this->get($url, true, [
-            'Client-ID' => 'kimne78kx3ncx6brgo4mv6wki5h1ko',
+            'Accept' => 'application/vnd.twitchtv.v5+json'
         ]);
     }
 

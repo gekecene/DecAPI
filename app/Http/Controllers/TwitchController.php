@@ -1801,26 +1801,114 @@ class TwitchController extends Controller
             $id = 'true';
         }
 
-        if ($id !== 'true') {
+        if ($id === 'true') {
+            $user = $this->api->userById($channel);
+        }
+        else {
             $user = $this->api->userByUsername($channel);
-
-            if (!empty($user['message'])) {
-                return Helper::text($user['message']);
-            }
-
-            $channel = $user['id'];
         }
 
+        if (!empty($user['message'])) {
+            return Helper::text($user['message']);
+        }
+
+
+        /**
+         * Attempt to retrieve channel product first.
+         * This API was originally removed since we started receiving "410 Gone"
+         * However, they later reinstated it as a temporary outage of sorts.
+         *
+         * If the channel product API isn't available, it'll be logged
+         * and fallback to use the API from TwitchEmotes.com
+         */
+        $channel = $user['login'];
+        $product = $this->twitchApi->channelProduct($channel);
+
+        if (empty($product)) {
+            if ($wantsJson) {
+                $errorData = [
+                    'error' => 'API error',
+                    'message' => 'Error loading the requested data.',
+                    'status' => 500,
+                ];
+
+                return Helper::json($errorData, 500);
+            }
+
+            return Helper::text(__('generic.error_loading_data_api'));
+        }
+
+        if (isset($product['error'])) {
+            /**
+             * If we get a "410 Gone" response back, then we just ignore it (for now).
+             * And let it fallback to TwitchEmotes.com
+             */
+            if ($product['status'] !== 410) {
+                $status = $product['status'];
+                $message = $product['message'];
+
+                if ($wantsJson) {
+                    return Helper::json(['error' => $product['error'], 'message' => $message, 'status' => $status], $status);
+                }
+
+                return Helper::text($message);
+            }
+        }
+        /**
+         * Process response from channel product API.
+         */
+        else {
+            if (empty($product['emoticons'])) {
+                $message = __('twitch.channel_missing_subemotes');
+                if ($wantsJson) {
+                    return Helper::json(['message' => $message, 'status' => 404], 404);
+                }
+
+                return Helper::text($message);
+            }
+
+            // Only get emotes that are active.
+            $emotes = array_filter($product['emoticons'], function($emote) {
+                return $emote['state'] === 'active' && $emote['subscriber_only'] === true;
+            });
+
+            // Regex = emote code in this context
+            // For some emotes (official Twitch emotes usually) there might
+            // be an actual regex. Subscriber emotes are probably fine.
+            $emotes = array_map(function($emote) {
+                return $emote['regex'];
+            }, $emotes);
+
+            if (empty($emotes)) {
+                $message = __('twitch.channel_missing_subemotes');
+
+                if ($wantsJson) {
+                    return Helper::json(['message' => $message, 'status' => 404], 404);
+                }
+
+                return Helper::text($message);
+            }
+
+            if ($wantsJson) {
+                return Helper::json(['emotes' => $emotes]);
+            }
+
+            return Helper::text(implode(' ', $emotes));
+        }
+
+        $channel = $user['id'];
         try {
             $emotes = $this->emotes->channel($channel);
         }
         catch (TwitchEmotesApiException $ex) {
             if ($wantsJson) {
-                return $this->errorJson([
+                $errorData = [
                     'error' => 'API error',
                     'message' => $ex->getMessage(),
                     'status' => 500,
-                ], 500);
+                ];
+
+                return Helper::Json($errorData, 500);
             }
 
             return Helper::text('[TwitchEmotes API Error] ' . $ex->getMessage());
@@ -1828,11 +1916,13 @@ class TwitchController extends Controller
         catch (Exception $ex)
         {
             if ($wantsJson) {
-                return $this->errorJson([
+                $errorData = [
                     'error' => 'API error',
                     'message' => 'Error loading the requested data.',
                     'status' => 500,
-                ], 500);
+                ];
+
+                return Helper::json($errorData, 500);
             }
 
             return Helper::text(__('generic.error_loading_data_api'));
@@ -1841,7 +1931,7 @@ class TwitchController extends Controller
         if (empty($emotes['emotes'])) {
             $message = __('twitch.channel_missing_subemotes');
             if ($wantsJson) {
-                return $this->errorJson(['message' => $message], 404);
+                return Helper::json(['message' => $message], 404);
             }
 
             return Helper::text($message);
@@ -1852,9 +1942,7 @@ class TwitchController extends Controller
         $emoteCodes = $emotes->codes();
 
         if ($wantsJson) {
-            return $this->json([
-                'emotes' => $emoteCodes,
-            ]);
+            return Helper::json(['emotes' => $emoteCodes]);
         }
 
         return Helper::text(implode(' ', $emoteCodes));
