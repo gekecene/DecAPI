@@ -1709,6 +1709,56 @@ class TwitchController extends Controller
             }
 
             /**
+             * Similarly to the /twitch/subscriber_emotes endpoint, we check the legacy
+             * Twitch API for more accurate information before we fallback to something else.
+             *
+             * In this case we check the API endpoint used by the Twitch dashboard and
+             * fallback to manually calculating by based on the Helix API.
+             */
+            $url = sprintf('https://api.twitch.tv/api/channels/%s/subscriber_count', $channel);
+
+            $headers = $this->version;
+            $headers['Authorization'] = 'OAuth ' . $token;
+            $data = $this->twitchApi->get($url, true, $headers);
+
+            /**
+             * Display the response from the subscriber_count API
+             *
+             * If an error occurs from the subscriber_count API that _isn't_
+             * "410 Gone", we handle that.
+             *
+             * If the error is "410 Gone", we ignore it and continue
+             * to the fallback method of manually calculating ourself.
+             */
+            if (!empty($data['status'])) {
+                if ($data['status'] !== 410) {
+                    if ($data['status'] === 401) {
+                        return Helper::text($reAuth);
+                    }
+
+                    return Helper::text($data['message']);
+                }
+            }
+            else {
+                /**
+                 * Intentionally ignoring the subtract parameter here,
+                 * as it was primarily meant for those channels that
+                 * have lifetime subscribers (bots etc.) that we don't know about.
+                 *
+                 * When manually calculating (fallback method), that might be a problem,
+                 * but the API endpoint used here doesn't count those subs
+                 * anyways, so we don't need to care about those.
+                 */
+                $text = $data['score'];
+
+                if (in_array('next_level', $include)) {
+                    $text = sprintf('%d/%d', $data['score'], $data['next_level']['minimum_score']);
+                }
+
+                return Helper::text($text);
+            }
+
+            /**
              * Use OAuth token in Helix API requests and retrieve
              * all subscribers for the specified channel
              */
