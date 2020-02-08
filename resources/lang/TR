@@ -1,0 +1,13 @@
+<?php
+/**
+ * Şu komutların zamanları için Türkçe Çeviriler: /twitch/followage & /twitch/uptime
+ */
+return [
+    'year' => ':value Yıl|:value Yıl',
+    'month' => ':value Ay|:value Ay',
+    'week' => ':value Hafta|:value Hafta',
+    'day' => ':value Gün|:value Gün',
+    'hour' => ':value Saat|:value Saat',
+    'minute' => ':value Dakika|:value Dakika',
+    'second' => ':value Saniye|:value Saniye',
+];
